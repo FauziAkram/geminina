@@ -1,6 +1,6 @@
 # Geminina - A Minimal C++ Chess Engine
 
-## To follow the YouTube adventure
+## To follow Geminina's YouTube journey
 *   **https://www.youtube.com/watch?v=gDWa8_NcEJs&list=PLrlFug4Xb94Ep2yBuo7nP-lJVeazvBnVo&ab_channel=ChessTubeTree**
 
 ## Overview
