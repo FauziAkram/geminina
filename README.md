@@ -1,5 +1,8 @@
 # Geminina - A Minimal C++ Chess Engine
 
+## To follow the YouTube adventure
+*   **https://www.youtube.com/watch?v=gDWa8_NcEJs&list=PLrlFug4Xb94Ep2yBuo7nP-lJVeazvBnVo&ab_channel=ChessTubeTree**
+
 ## Overview
 
 Geminina is a UCI (Universal Chess Interface) compatible chess engine written in C++. It's designed with a focus on clarity, correctness, and simplicity, providing a foundational example of a legal-move-generating chess engine. While not aiming for grandmaster strength in its current iteration, it implements core chess logic, search algorithms, and UCI communication, making it suitable for learning and as a base for further development.
