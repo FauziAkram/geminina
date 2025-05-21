@@ -112,7 +112,8 @@ const int king_pst_eg[64] = {
 const int MATE_SCORE = 100000; 
 const int DRAW_SCORE = 0;     
 const int MAX_SEARCH_PLY = 64; 
-const int MAX_QUIESCENCE_PLY = 5; 
+const int MAX_QUIESCENCE_PLY = 6; // Can be slightly deeper for q-search if needed
+const int IN_CHECK_PENALTY = 50; // Penalty for being in check in q-search stand-pat
 
 // --- Forward Declarations ---
 struct BoardState;
@@ -494,25 +495,39 @@ int quiescenceSearch(BoardState state, int alpha, int beta, bool maximizingPlaye
     if (quiescenceDepth <= 0) return evaluateBoard(state); 
 
     int stand_pat = evaluateBoard(state); 
+    bool in_check = isKingInCheck(state, state.whiteToMove);
+
+    if (in_check) { // If in check, consider all moves, not just captures
+        if (maximizingPlayer) stand_pat -= IN_CHECK_PENALTY; // Penalize being in check
+        else stand_pat += IN_CHECK_PENALTY;
+    }
+
 
     if (maximizingPlayer) {
-        if (stand_pat >= beta) return beta; 
+        if (stand_pat >= beta && !in_check) return beta; // Stand-pat cutoff only if not in check
         alpha = std::max(alpha, stand_pat);
     } else {
-        if (stand_pat <= alpha) return alpha; 
+        if (stand_pat <= alpha && !in_check) return alpha; 
         beta = std::min(beta, stand_pat);
     }
 
-    std::vector<Move> captureMoves;
-    generateLegalMoves(state, captureMoves, true); 
-    orderMoves(state, captureMoves); // Order captures using MVV-LVA
+    std::vector<Move> q_moves;
+    if (in_check) {
+        generateLegalMoves(state, q_moves, false); // All legal moves if in check
+    } else {
+        generateLegalMoves(state, q_moves, true); // Only captures if not in check
+    }
+    orderMoves(state, q_moves); // Order moves (MVV-LVA for captures)
 
-    if (captureMoves.empty() && !isKingInCheck(state, state.whiteToMove) ) { // Only return stand_pat if not in check (avoid returning bad eval in check)
+    if (q_moves.empty() && !in_check) { // No captures and not in check
         return stand_pat; 
+    }
+    if (q_moves.empty() && in_check) { // No legal moves while in check = checkmate
+        return maximizingPlayer ? (-MATE_SCORE - MAX_SEARCH_PLY - quiescenceDepth) : (MATE_SCORE + MAX_SEARCH_PLY + quiescenceDepth);
     }
     
     if (maximizingPlayer) {
-        for (const auto& move : captureMoves) {
+        for (const auto& move : q_moves) {
             BoardState nextState = state;
             apply_raw_move_to_board(nextState, move);
             int score = quiescenceSearch(nextState, alpha, beta, false, startTime, timeLimit, quiescenceDepth - 1);
@@ -522,7 +537,7 @@ int quiescenceSearch(BoardState state, int alpha, int beta, bool maximizingPlaye
         }
         return alpha;
     } else {
-        for (const auto& move : captureMoves) {
+        for (const auto& move : q_moves) {
             BoardState nextState = state;
             apply_raw_move_to_board(nextState, move);
             int score = quiescenceSearch(nextState, alpha, beta, true, startTime, timeLimit, quiescenceDepth - 1);
@@ -537,12 +552,12 @@ int quiescenceSearch(BoardState state, int alpha, int beta, bool maximizingPlaye
 // --- MVV-LVA Move Ordering ---
 void orderMoves(const BoardState& state, std::vector<Move>& moves) {
     for (auto& move : moves) {
-        move.score = 0; // Default score for non-captures or unrecognised pieces
+        move.score = 0; 
         if (move.isCapture(state)) {
             char movingPieceType = toupper(state.board[move.fromRow][move.fromCol]);
             char capturedPieceType;
             if (move.isEnPassantCapture) {
-                capturedPieceType = W_PAWN; // EP always captures a pawn
+                capturedPieceType = W_PAWN; 
             } else {
                 capturedPieceType = toupper(state.board[move.toRow][move.toCol]);
             }
@@ -551,15 +566,17 @@ void orderMoves(const BoardState& state, std::vector<Move>& moves) {
             auto victim_it = mvv_lva_piece_values.find(capturedPieceType);
             if(victim_it != mvv_lva_piece_values.end()) victimValue = victim_it->second;
 
-            int attackerValue = 10; // Default high if attacker unknown (should not happen for valid pieces)
+            int attackerValue = 10; 
             auto attacker_it = mvv_lva_piece_values.find(movingPieceType);
             if(attacker_it != mvv_lva_piece_values.end()) attackerValue = attacker_it->second;
             
-            move.score = (victimValue * 100) - attackerValue; // MVV (higher) - LVA (lower is better)
+            move.score = (victimValue * 100) - attackerValue; 
         }
-        // TODO: Add scores for promotions, killer moves, history heuristic etc.
+        // Prioritize promotions
+        if (move.promotionPiece != EMPTY) {
+            move.score += mvv_lva_piece_values.at(toupper(move.promotionPiece)) * 10; // Add bonus for promotion value
+        }
     }
-    // Sort moves: higher scores first
     std::sort(moves.begin(), moves.end(), [](const Move& a, const Move& b) {
         return a.score > b.score;
     });
@@ -595,7 +612,7 @@ int alphaBetaSearch(BoardState state, int depth, int alpha, int beta, bool maxim
         }
     }
     
-    orderMoves(state, legalMoves); // Order all legal moves
+    orderMoves(state, legalMoves); 
 
 
     if (maximizingPlayer) {
@@ -647,7 +664,7 @@ std::string checkGameEndStatus() {
 }
 
 // --- UCI Handling --- 
-void handleUci() { std::cout << "id name Geminina\nid author LLM Developer\nuciok" << std::endl; } // Updated name
+void handleUci() { std::cout << "id name Geminina\nid author LLM Developer\nuciok" << std::endl; } 
 void handleIsReady() { std::cout << "readyok" << std::endl; }
 void handleUciNewGame() { currentBoard.reset(); }
 void handlePosition(std::istringstream& iss) {
@@ -733,7 +750,8 @@ void handleGo(std::istringstream& iss) {
 
     Move bestMoveOverall = legalEngineMoves[0]; 
     Move bestMoveThisIteration = legalEngineMoves[0];
-    int bestEvalOverall = std::numeric_limits<int>::min();
+    int bestEvalOverall = currentBoard.whiteToMove ? std::numeric_limits<int>::min() : std::numeric_limits<int>::max();
+    if (!currentBoard.whiteToMove) bestEvalOverall = std::numeric_limits<int>::min(); 
 
 
     bool isEngineWhite = currentBoard.whiteToMove;
@@ -746,7 +764,7 @@ void handleGo(std::istringstream& iss) {
         
         uint64_t nodes_at_start_of_iter = nodes_searched.load(std::memory_order_relaxed); 
 
-        for (const auto& engineMove : legalEngineMoves) { // Use the pre-ordered root moves 
+        for (const auto& engineMove : legalEngineMoves) { 
             BoardState boardAfterEngineMove = currentBoard;
             apply_raw_move_to_board(boardAfterEngineMove, engineMove); 
             int evalFromWhitePerspective = alphaBetaSearch(boardAfterEngineMove, currentDepth - 1, 
