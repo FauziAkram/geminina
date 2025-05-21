@@ -50,7 +50,7 @@ g++ -o Geminina main.cpp -std=c++17 -O2
 -std=c++17: Specifies the C++17 standard.
 -O2: Enables optimizations (optional, but recommended for better performance). You can also use -O3.
 
-An executable named Geminina (or Geminina.exe on Windows) will be created.
+An executable named Geminina (or Geminina.exe on Windows) will be created.```
 
 **Usage**
 Geminina is a UCI engine, which means it's designed to be used with a UCI-compatible chess graphical user interface (GUI).
