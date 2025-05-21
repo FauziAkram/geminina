@@ -24,6 +24,16 @@ const std::map<char, int> piece_values = {
     {W_QUEEN, 900}, {B_QUEEN, 900},
     {W_KING, 20000}, {B_KING, 20000} 
 };
+// Simplified piece values for MVV-LVA (less granularity needed)
+const std::map<char, int> mvv_lva_piece_values = {
+    {W_PAWN, 1}, {B_PAWN, 1},
+    {W_KNIGHT, 3}, {B_KNIGHT, 3},
+    {W_BISHOP, 3}, {B_BISHOP, 3},
+    {W_ROOK, 5}, {B_ROOK, 5},
+    {W_QUEEN, 9}, {B_QUEEN, 9},
+    {W_KING, 10}, {B_KING, 10} // King captures are rare but high value victim
+};
+
 
 // --- Piece-Square Tables (PSTs) ---
 const int pawn_pst[64] = {
@@ -120,6 +130,7 @@ int quiescenceSearch(BoardState state, int alpha, int beta, bool maximizingPlaye
                      const std::chrono::steady_clock::time_point& startTime,
                      const std::chrono::milliseconds& timeLimit, int quiescenceDepth);
 char getPieceAt(const BoardState& state, int r, int c); 
+void orderMoves(const BoardState& state, std::vector<Move>& moves);
 
 
 // Global flag to signal time out (checked within search)
@@ -136,10 +147,11 @@ struct Move {
     bool isKingSideCastle;
     bool isQueenSideCastle;
     bool isEnPassantCapture;
+    int score; // For move ordering
     
     Move(int fr=0, int fc=0, int tr=0, int tc=0, char promo=EMPTY, bool ksc=false, bool qsc=false, bool ep=false)
         : fromRow(fr), fromCol(fc), toRow(tr), toCol(tc), promotionPiece(promo),
-          isKingSideCastle(ksc), isQueenSideCastle(qsc), isEnPassantCapture(ep) {}
+          isKingSideCastle(ksc), isQueenSideCastle(qsc), isEnPassantCapture(ep), score(0) {}
           
     std::string toUci() const {
         std::string uci = "";
@@ -246,7 +258,7 @@ int evaluateBoard(const BoardState& state) {
                 if(it != piece_values.end()) piece_val = it->second;
                 
                 if (toupper(piece) != W_KING) { 
-                    auto mat_it = piece_values.find(toupper(piece)); // Use toupper for general material value
+                    auto mat_it = piece_values.find(toupper(piece)); 
                     if (mat_it != piece_values.end()) total_material_no_kings += mat_it->second; 
                 }
 
@@ -493,8 +505,9 @@ int quiescenceSearch(BoardState state, int alpha, int beta, bool maximizingPlaye
 
     std::vector<Move> captureMoves;
     generateLegalMoves(state, captureMoves, true); 
+    orderMoves(state, captureMoves); // Order captures using MVV-LVA
 
-    if (captureMoves.empty()) {
+    if (captureMoves.empty() && !isKingInCheck(state, state.whiteToMove) ) { // Only return stand_pat if not in check (avoid returning bad eval in check)
         return stand_pat; 
     }
     
@@ -521,8 +534,39 @@ int quiescenceSearch(BoardState state, int alpha, int beta, bool maximizingPlaye
     }
 }
 
+// --- MVV-LVA Move Ordering ---
+void orderMoves(const BoardState& state, std::vector<Move>& moves) {
+    for (auto& move : moves) {
+        move.score = 0; // Default score for non-captures or unrecognised pieces
+        if (move.isCapture(state)) {
+            char movingPieceType = toupper(state.board[move.fromRow][move.fromCol]);
+            char capturedPieceType;
+            if (move.isEnPassantCapture) {
+                capturedPieceType = W_PAWN; // EP always captures a pawn
+            } else {
+                capturedPieceType = toupper(state.board[move.toRow][move.toCol]);
+            }
 
-// --- Alpha-Beta Search with Quiescence ---
+            int victimValue = 0;
+            auto victim_it = mvv_lva_piece_values.find(capturedPieceType);
+            if(victim_it != mvv_lva_piece_values.end()) victimValue = victim_it->second;
+
+            int attackerValue = 10; // Default high if attacker unknown (should not happen for valid pieces)
+            auto attacker_it = mvv_lva_piece_values.find(movingPieceType);
+            if(attacker_it != mvv_lva_piece_values.end()) attackerValue = attacker_it->second;
+            
+            move.score = (victimValue * 100) - attackerValue; // MVV (higher) - LVA (lower is better)
+        }
+        // TODO: Add scores for promotions, killer moves, history heuristic etc.
+    }
+    // Sort moves: higher scores first
+    std::sort(moves.begin(), moves.end(), [](const Move& a, const Move& b) {
+        return a.score > b.score;
+    });
+}
+
+
+// --- Alpha-Beta Search with Quiescence & Move Ordering ---
 int alphaBetaSearch(BoardState state, int depth, int alpha, int beta, bool maximizingPlayer, 
                     const std::chrono::steady_clock::time_point& startTime, 
                     const std::chrono::milliseconds& timeLimit) 
@@ -551,14 +595,12 @@ int alphaBetaSearch(BoardState state, int depth, int alpha, int beta, bool maxim
         }
     }
     
-    std::vector<Move> orderedSearchMoves;
-    for(const auto& m : legalMoves) if(m.isCapture(state)) orderedSearchMoves.push_back(m);
-    for(const auto& m : legalMoves) if(!m.isCapture(state)) orderedSearchMoves.push_back(m);
+    orderMoves(state, legalMoves); // Order all legal moves
 
 
     if (maximizingPlayer) {
         int maxEval = std::numeric_limits<int>::min();
-        for (const auto& move : orderedSearchMoves) { 
+        for (const auto& move : legalMoves) { 
             BoardState nextState = state; apply_raw_move_to_board(nextState, move); 
             int eval = alphaBetaSearch(nextState, depth - 1, alpha, beta, false, startTime, timeLimit); 
             if (time_is_up.load(std::memory_order_relaxed)) return 0; 
@@ -569,7 +611,7 @@ int alphaBetaSearch(BoardState state, int depth, int alpha, int beta, bool maxim
         return maxEval;
     } else { 
         int minEval = std::numeric_limits<int>::max();
-        for (const auto& move : orderedSearchMoves) { 
+        for (const auto& move : legalMoves) { 
             BoardState nextState = state; apply_raw_move_to_board(nextState, move); 
             int eval = alphaBetaSearch(nextState, depth - 1, alpha, beta, true, startTime, timeLimit); 
             if (time_is_up.load(std::memory_order_relaxed)) return 0;
@@ -605,7 +647,7 @@ std::string checkGameEndStatus() {
 }
 
 // --- UCI Handling --- 
-void handleUci() { std::cout << "id name MyLLMEngine\nid author LLM Developer\nuciok" << std::endl; }
+void handleUci() { std::cout << "id name Geminina\nid author LLM Developer\nuciok" << std::endl; } // Updated name
 void handleIsReady() { std::cout << "readyok" << std::endl; }
 void handleUciNewGame() { currentBoard.reset(); }
 void handlePosition(std::istringstream& iss) {
@@ -687,15 +729,11 @@ void handleGo(std::istringstream& iss) {
     generateLegalMoves(currentBoard, legalEngineMoves, false);
     if (legalEngineMoves.empty()) { std::cout << "bestmove 0000" << std::endl; return; }
 
-    std::vector<Move> orderedMoves;
-    for(const auto& move : legalEngineMoves) { if (move.isCapture(currentBoard)) orderedMoves.push_back(move); }
-    for(const auto& move : legalEngineMoves) { if (!move.isCapture(currentBoard)) orderedMoves.push_back(move); }
+    orderMoves(currentBoard, legalEngineMoves); // Order root moves
 
-    Move bestMoveOverall = orderedMoves[0]; 
-    Move bestMoveThisIteration = orderedMoves[0];
-    // Corrected: Initialize bestEvalOverall from the engine's perspective
-    int bestEvalOverall = currentBoard.whiteToMove ? std::numeric_limits<int>::min() : std::numeric_limits<int>::max();
-    if (!currentBoard.whiteToMove) bestEvalOverall = std::numeric_limits<int>::min(); // For black, higher (less negative) is better
+    Move bestMoveOverall = legalEngineMoves[0]; 
+    Move bestMoveThisIteration = legalEngineMoves[0];
+    int bestEvalOverall = std::numeric_limits<int>::min();
 
 
     bool isEngineWhite = currentBoard.whiteToMove;
@@ -703,19 +741,18 @@ void handleGo(std::istringstream& iss) {
     // Iterative Deepening Loop
     for (int currentDepth = 1; currentDepth <= MAX_SEARCH_PLY; ++currentDepth) {
         auto iterationStartTime = std::chrono::steady_clock::now(); 
-        int currentIterBestEval = std::numeric_limits<int>::min(); // Always trying to maximize from engine's perspective in this loop
+        int currentIterBestEval = std::numeric_limits<int>::min(); 
         std::vector<Move> candidateBestMovesThisIteration;
         
         uint64_t nodes_at_start_of_iter = nodes_searched.load(std::memory_order_relaxed); 
 
-        for (const auto& engineMove : orderedMoves) { 
+        for (const auto& engineMove : legalEngineMoves) { // Use the pre-ordered root moves 
             BoardState boardAfterEngineMove = currentBoard;
             apply_raw_move_to_board(boardAfterEngineMove, engineMove); 
-            // AlphaBetaSearch returns score from White's perspective
             int evalFromWhitePerspective = alphaBetaSearch(boardAfterEngineMove, currentDepth - 1, 
                                                            std::numeric_limits<int>::min(), 
                                                            std::numeric_limits<int>::max(), 
-                                                           !isEngineWhite, // Next player is the opponent
+                                                           !isEngineWhite, 
                                                            startTime, timeLimit);
             
             if (time_is_up.load(std::memory_order_relaxed)) break; 
@@ -723,7 +760,7 @@ void handleGo(std::istringstream& iss) {
             int currentMoveScoreForEngine; 
             if (isEngineWhite) { 
                 currentMoveScoreForEngine = evalFromWhitePerspective;
-            } else { // Engine is Black, wants to minimize White's score (or maximize -White's score)
+            } else { 
                 currentMoveScoreForEngine = -evalFromWhitePerspective; 
             }
             
@@ -736,31 +773,26 @@ void handleGo(std::istringstream& iss) {
             }
         } 
 
-        if (time_is_up.load(std::memory_order_relaxed)) { 
-            // std::cout << "info string Time up during depth " << currentDepth << std::endl;
-            break; 
-        }
+        if (time_is_up.load(std::memory_order_relaxed)) { break; }
 
         if (!candidateBestMovesThisIteration.empty()) {
             std::uniform_int_distribution<int> distrib(0, candidateBestMovesThisIteration.size() - 1);
             bestMoveThisIteration = candidateBestMovesThisIteration[distrib(global_rng)];
             bestMoveOverall = bestMoveThisIteration; 
-            bestEvalOverall = currentIterBestEval; // Store the best score from the engine's perspective
+            bestEvalOverall = currentIterBestEval; 
             
             auto iterationEndTime = std::chrono::steady_clock::now();
             auto iterationDuration = std::chrono::duration_cast<std::chrono::milliseconds>(iterationEndTime - iterationStartTime);
             uint64_t nodes_this_iter = nodes_searched.load(std::memory_order_relaxed) - nodes_at_start_of_iter;
             uint64_t nps = (iterationDuration.count() > 0) ? (nodes_this_iter * 1000 / iterationDuration.count()) : 0;
 
-            // UCI score is always from current player's perspective. Mate scores are tricky.
             int uci_score_val = bestEvalOverall;
             std::string uci_score_type = "cp";
 
-            if (abs(uci_score_val) > MATE_SCORE - MAX_SEARCH_PLY * 2 ) { // If it's a mate score
+            if (abs(uci_score_val) > MATE_SCORE - MAX_SEARCH_PLY * 2 ) { 
                 uci_score_type = "mate";
-                // Calculate mate in X moves. Positive if engine is mating, negative if engine is being mated.
-                int mate_in_ply_from_root = MATE_SCORE - abs(uci_score_val); // Ply to mate from current position
-                int mate_in_moves = (mate_in_ply_from_root + 1) / 2;       // Convert ply to moves
+                int mate_in_ply_from_root = MATE_SCORE - abs(uci_score_val); 
+                int mate_in_moves = (mate_in_ply_from_root + 1) / 2;       
                 uci_score_val = (bestEvalOverall > 0) ? mate_in_moves : -mate_in_moves;
             }
 
@@ -772,19 +804,10 @@ void handleGo(std::istringstream& iss) {
                       << " nps " << nps
                       << " pv " << bestMoveOverall.toUci() << std::endl; 
 
-        } else { 
-            // std::cout << "info string No candidate moves found for depth " << currentDepth << std::endl;
-            break; 
-        }
+        } else { break; }
 
-        if (std::chrono::steady_clock::now() - startTime >= timeLimit) { 
-            // std::cout << "info string Time limit reached after depth " << currentDepth << std::endl;
-            break; 
-        }
-        if (abs(bestEvalOverall) >= MATE_SCORE - MAX_SEARCH_PLY*2) { // Mate found
-            // std::cout << "info string Mate score detected " << bestEvalOverall << ", stopping search." << std::endl;
-            break; 
-        }
+        if (std::chrono::steady_clock::now() - startTime >= timeLimit) { break; }
+        if (abs(bestEvalOverall) >= MATE_SCORE - MAX_SEARCH_PLY*2) { break; }
 
     } // End Iterative Deepening Loop
 
