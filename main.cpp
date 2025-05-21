@@ -31,7 +31,7 @@ const std::map<char, int> mvv_lva_piece_values = {
     {W_BISHOP, 3}, {B_BISHOP, 3},
     {W_ROOK, 5}, {B_ROOK, 5},
     {W_QUEEN, 9}, {B_QUEEN, 9},
-    {W_KING, 10}, {B_KING, 10} // King captures are rare but high value victim
+    {W_KING, 10}, {B_KING, 10} 
 };
 
 
@@ -107,17 +107,31 @@ const int king_pst_eg[64] = {
     -50,-30,-30,-30,-30,-30,-30,-50
 };
 
-
 // Evaluation scores for terminal states (absolute value)
 const int MATE_SCORE = 100000; 
 const int DRAW_SCORE = 0;     
-const int MAX_SEARCH_PLY = 64; // Max depth for iterative deepening (can be high)
+const int MAX_SEARCH_PLY = 64; 
 const int MAX_QUIESCENCE_PLY = 6; 
 const int IN_CHECK_PENALTY = 50; 
+const int LMR_REDUCTION = 1; // Depth reduction for LMR
+const int LMR_MIN_MOVES = 3; // Apply LMR after this many moves have been searched at a node
+const int LMR_MIN_DEPTH = 3; // Apply LMR only if current depth is at least this
+
+// Transposition Table Entry Flags
+enum TTEntryFlag { TT_EXACT, TT_LOWERBOUND, TT_UPPERBOUND, TT_INVALID };
+struct TTEntry {
+    int score;
+    int depth;
+    TTEntryFlag flag;
+
+    TTEntry() : score(0), depth(-1), flag(TT_INVALID) {}
+};
+std::map<std::string, TTEntry> transpositionTable;
+const size_t MAX_TT_SIZE = 1000000; 
 
 // --- Forward Declarations ---
 struct BoardState;
-struct Move;
+struct Move; 
 void generateLegalMoves(const BoardState& state, std::vector<Move>& legal_moves, bool capturesOnly = false);
 bool isKingInCheck(const BoardState& state, bool kingIsWhite);
 bool isSquareAttacked(const BoardState& state, int r, int c, bool byWhiteAttacker);
@@ -148,7 +162,7 @@ struct Move {
     bool isKingSideCastle;
     bool isQueenSideCastle;
     bool isEnPassantCapture;
-    int score; // For move ordering
+    int score; 
     
     Move(int fr=0, int fc=0, int tr=0, int tc=0, char promo=EMPTY, bool ksc=false, bool qsc=false, bool ep=false)
         : fromRow(fr), fromCol(fc), toRow(tr), toCol(tc), promotionPiece(promo),
@@ -182,6 +196,8 @@ struct BoardState {
     int halfmoveClock;
     int fullmoveNumber;
     std::map<std::string, int> positionCounts; 
+    std::string currentFenKey; 
+
     BoardState() { reset(); }
     void reset() {
         const char initial_board[8][8] = {
@@ -196,9 +212,11 @@ struct BoardState {
         blackKingSideCastle = blackQueenSideCastle = true;
         enPassantTarget = {-1,-1};
         halfmoveClock = 0; fullmoveNumber = 1;
-        positionCounts.clear(); addCurrentPositionToHistory();
+        positionCounts.clear(); 
+        currentFenKey = getPositionKey();
+        addCurrentPositionToHistory();
     }
-    std::string getPositionKey() const {
+    std::string getPositionKey() const { 
         std::stringstream ss;
         for(int r=0; r<8; ++r) for(int c=0; c<8; ++c) ss << board[r][c];
         ss << (whiteToMove ? 'w' : 'b');
@@ -208,7 +226,7 @@ struct BoardState {
         else ss << '-';
         return ss.str();
     }
-    void addCurrentPositionToHistory() { positionCounts[getPositionKey()]++; }
+    void addCurrentPositionToHistory() { positionCounts[currentFenKey]++; } 
     void parseFen(const std::string& fenStr) {
         std::fill(&board[0][0], &board[0][0]+sizeof(board), EMPTY);
         positionCounts.clear(); 
@@ -226,7 +244,11 @@ struct BoardState {
         if(part=="-") enPassantTarget={-1,-1}; else { enPassantTarget = {'8'-part[1], part[0]-'a'}; }
         if(fenStream >> part) halfmoveClock=std::stoi(part); else halfmoveClock=0;
         if(fenStream >> part) fullmoveNumber=std::stoi(part); else fullmoveNumber=1;
+        currentFenKey = getPositionKey();
         addCurrentPositionToHistory();
+    }
+    void updateFenKey() { 
+        currentFenKey = getPositionKey();
     }
 };
 
@@ -427,6 +449,7 @@ void apply_raw_move_to_board(BoardState& state, const Move& move) {
     if (captured == W_ROOK) { if (move.toRow == 7 && move.toCol == 0) state.whiteQueenSideCastle = false; else if (move.toRow == 7 && move.toCol == 7) state.whiteKingSideCastle = false; } 
     else if (captured == B_ROOK) { if (move.toRow == 0 && move.toCol == 0) state.blackQueenSideCastle = false; else if (move.toRow == 0 && move.toCol == 7) state.blackKingSideCastle = false; }
     state.whiteToMove = !state.whiteToMove;
+    state.updateFenKey(); 
 }
 
 // --- Check Detection --- 
@@ -472,7 +495,7 @@ void generateLegalMoves(const BoardState& S, std::vector<Move>& legal_moves, boo
     std::vector<Move> pseudo; generateAllPseudoLegalMoves(S, pseudo, capturesOnly); 
     bool isWhite = S.whiteToMove;
     for (const auto& m : pseudo) {
-        BoardState temp = S; apply_raw_move_to_board(temp, m);
+        BoardState temp = S; apply_raw_move_to_board(temp, m); 
         if (!isKingInCheck(temp, isWhite)) legal_moves.push_back(m);
     }
 }
@@ -497,14 +520,13 @@ int quiescenceSearch(BoardState state, int alpha, int beta, bool maximizingPlaye
     int stand_pat = evaluateBoard(state); 
     bool in_check = isKingInCheck(state, state.whiteToMove);
 
-    // Apply penalty if stand-pat is in check
     if (in_check) { 
         if (maximizingPlayer) stand_pat -= IN_CHECK_PENALTY; 
         else stand_pat += IN_CHECK_PENALTY;
     }
 
+
     if (maximizingPlayer) {
-        // Stand-pat cutoff only if NOT in check. If in check, we must make a move.
         if (stand_pat >= beta && !in_check) return beta; 
         alpha = std::max(alpha, stand_pat);
     } else {
@@ -513,16 +535,12 @@ int quiescenceSearch(BoardState state, int alpha, int beta, bool maximizingPlaye
     }
 
     std::vector<Move> q_moves;
-    // If in check, generate all legal moves to find an escape.
-    // Otherwise, only generate captures for quiescence.
     generateLegalMoves(state, q_moves, !in_check); 
     orderMoves(state, q_moves); 
 
-    // If in check and no legal moves, it's checkmate.
     if (in_check && q_moves.empty()) {
         return maximizingPlayer ? (-MATE_SCORE - MAX_SEARCH_PLY - quiescenceDepth) : (MATE_SCORE + MAX_SEARCH_PLY + quiescenceDepth);
     }
-    // If not in check and no captures, return stand_pat.
     if (!in_check && q_moves.empty()) {
         return stand_pat; 
     }
@@ -576,9 +594,9 @@ void orderMoves(const BoardState& state, std::vector<Move>& moves) {
         if (move.promotionPiece != EMPTY) {
             auto promo_it = mvv_lva_piece_values.find(toupper(move.promotionPiece));
             if (promo_it != mvv_lva_piece_values.end()){
-                 move.score += promo_it->second * 100; // Promotions are very valuable
+                 move.score += promo_it->second * 100; 
             } else {
-                 move.score += mvv_lva_piece_values.at(W_QUEEN) * 100; // Default to Queen value if not found
+                 move.score += mvv_lva_piece_values.at(W_QUEEN) * 100; 
             }
         }
     }
@@ -588,13 +606,24 @@ void orderMoves(const BoardState& state, std::vector<Move>& moves) {
 }
 
 
-// --- Alpha-Beta Search with Quiescence & Move Ordering ---
+// --- Alpha-Beta Search with Quiescence, Move Ordering & TT ---
 int alphaBetaSearch(BoardState state, int depth, int alpha, int beta, bool maximizingPlayer, 
                     const std::chrono::steady_clock::time_point& startTime, 
                     const std::chrono::milliseconds& timeLimit) 
 {
     if (time_is_up.load(std::memory_order_relaxed)) return 0; 
     nodes_searched++; 
+
+    std::string currentKey = state.currentFenKey; 
+    auto tt_it = transpositionTable.find(currentKey);
+    if (tt_it != transpositionTable.end()) {
+        TTEntry& entry = tt_it->second;
+        if (entry.depth >= depth) { 
+            if (entry.flag == TT_EXACT) return entry.score;
+            if (entry.flag == TT_LOWERBOUND && entry.score >= beta) return entry.score; 
+            if (entry.flag == TT_UPPERBOUND && entry.score <= alpha) return entry.score; 
+        }
+    }
 
     std::vector<Move> legalMoves;
     generateLegalMoves(state, legalMoves, false); 
@@ -603,7 +632,7 @@ int alphaBetaSearch(BoardState state, int depth, int alpha, int beta, bool maxim
         if (isKingInCheck(state, state.whiteToMove)) return maximizingPlayer ? (-MATE_SCORE - depth) : (MATE_SCORE + depth); 
         else return DRAW_SCORE; 
     }
-    if (state.positionCounts[state.getPositionKey()] >= 3 || state.halfmoveClock >= 100) return DRAW_SCORE; 
+    if (state.positionCounts[currentKey] >= 3 || state.halfmoveClock >= 100) return DRAW_SCORE; 
     
     if (depth == 0) {
         return quiescenceSearch(state, alpha, beta, maximizingPlayer, startTime, timeLimit, MAX_QUIESCENCE_PLY);
@@ -618,30 +647,84 @@ int alphaBetaSearch(BoardState state, int depth, int alpha, int beta, bool maxim
     }
     
     orderMoves(state, legalMoves); 
+    TTEntryFlag bestFlag = TT_UPPERBOUND; 
+    int movesSearched = 0;
 
 
     if (maximizingPlayer) {
         int maxEval = std::numeric_limits<int>::min();
         for (const auto& move : legalMoves) { 
             BoardState nextState = state; apply_raw_move_to_board(nextState, move); 
-            int eval = alphaBetaSearch(nextState, depth - 1, alpha, beta, false, startTime, timeLimit); 
+            int currentEval;
+            // Late Move Reduction (LMR)
+            if (depth >= LMR_MIN_DEPTH && movesSearched >= LMR_MIN_MOVES && !move.isCapture(state) && move.promotionPiece == EMPTY && !isKingInCheck(state, state.whiteToMove)) {
+                currentEval = alphaBetaSearch(nextState, depth - 1 - LMR_REDUCTION, alpha, beta, false, startTime, timeLimit);
+            } else {
+                currentEval = alphaBetaSearch(nextState, depth - 1, alpha, beta, false, startTime, timeLimit);
+            }
+            
             if (time_is_up.load(std::memory_order_relaxed)) return 0; 
-            maxEval = std::max(maxEval, eval);
-            alpha = std::max(alpha, eval); 
-            if (beta <= alpha) break; 
+            
+            // Re-search if LMR was applied and the score is promising
+            if (depth >= LMR_MIN_DEPTH && movesSearched >= LMR_MIN_MOVES && !move.isCapture(state) && move.promotionPiece == EMPTY && !isKingInCheck(state, state.whiteToMove) && currentEval > alpha) {
+                 currentEval = alphaBetaSearch(nextState, depth - 1, alpha, beta, false, startTime, timeLimit);
+                 if (time_is_up.load(std::memory_order_relaxed)) return 0; 
+            }
+
+            if (currentEval > maxEval) maxEval = currentEval; 
+            
+            if (currentEval > alpha) {
+                alpha = currentEval;
+                bestFlag = TT_EXACT; 
+            }
+            if (beta <= alpha) { 
+                 bestFlag = TT_LOWERBOUND; 
+                 break; 
+            }
+            movesSearched++;
         }
-        return maxEval;
+        if (!time_is_up.load(std::memory_order_relaxed) && (transpositionTable.size() < MAX_TT_SIZE || tt_it != transpositionTable.end())) { 
+            TTEntry newEntry; newEntry.score = maxEval; newEntry.depth = depth; newEntry.flag = bestFlag;
+            transpositionTable[currentKey] = newEntry;
+        }
+        return maxEval; 
     } else { 
         int minEval = std::numeric_limits<int>::max();
         for (const auto& move : legalMoves) { 
             BoardState nextState = state; apply_raw_move_to_board(nextState, move); 
-            int eval = alphaBetaSearch(nextState, depth - 1, alpha, beta, true, startTime, timeLimit); 
+            int currentEval;
+            // Late Move Reduction (LMR)
+            if (depth >= LMR_MIN_DEPTH && movesSearched >= LMR_MIN_MOVES && !move.isCapture(state) && move.promotionPiece == EMPTY && !isKingInCheck(state, state.whiteToMove)) {
+                 currentEval = alphaBetaSearch(nextState, depth - 1 - LMR_REDUCTION, alpha, beta, true, startTime, timeLimit);
+            } else {
+                 currentEval = alphaBetaSearch(nextState, depth - 1, alpha, beta, true, startTime, timeLimit);
+            }
+
             if (time_is_up.load(std::memory_order_relaxed)) return 0;
-            minEval = std::min(minEval, eval);
-            beta = std::min(beta, eval); 
-            if (beta <= alpha) break; 
+
+            // Re-search for LMR
+            if (depth >= LMR_MIN_DEPTH && movesSearched >= LMR_MIN_MOVES && !move.isCapture(state) && move.promotionPiece == EMPTY && !isKingInCheck(state, state.whiteToMove) && currentEval < beta) {
+                 currentEval = alphaBetaSearch(nextState, depth - 1, alpha, beta, true, startTime, timeLimit);
+                 if (time_is_up.load(std::memory_order_relaxed)) return 0;
+            }
+
+            if (currentEval < minEval) minEval = currentEval; 
+            
+            if (currentEval < beta) {
+                beta = currentEval;
+                bestFlag = TT_EXACT; 
+            }
+            if (beta <= alpha) { 
+                bestFlag = TT_UPPERBOUND; 
+                break; 
+            }
+            movesSearched++;
         }
-        return minEval;
+        if (!time_is_up.load(std::memory_order_relaxed) && (transpositionTable.size() < MAX_TT_SIZE || tt_it != transpositionTable.end())) {
+            TTEntry newEntry; newEntry.score = minEval; newEntry.depth = depth; newEntry.flag = bestFlag;
+            transpositionTable[currentKey] = newEntry;
+        }
+        return minEval; 
     }
 }
 
@@ -658,7 +741,7 @@ void master_apply_move(const Move& move) {
 }
 bool isCheckmate() { std::vector<Move> m; generateLegalMoves(currentBoard, m, false); return m.empty() && isKingInCheck(currentBoard, currentBoard.whiteToMove); }
 bool isStalemate() { std::vector<Move> m; generateLegalMoves(currentBoard, m, false); return m.empty() && !isKingInCheck(currentBoard, currentBoard.whiteToMove); }
-bool isThreefoldRepetition() { return currentBoard.positionCounts[currentBoard.getPositionKey()] >= 3; }
+bool isThreefoldRepetition() { return currentBoard.positionCounts[currentBoard.currentFenKey] >= 3; }
 bool isFiftyMoveDraw() { return currentBoard.halfmoveClock >= 100; }
 std::string checkGameEndStatus() {
     if (isCheckmate()) return currentBoard.whiteToMove ? "0-1 {Black mates}" : "1-0 {White mates}";
@@ -671,14 +754,21 @@ std::string checkGameEndStatus() {
 // --- UCI Handling --- 
 void handleUci() { std::cout << "id name Geminina\nid author LLM Developer\nuciok" << std::endl; } 
 void handleIsReady() { std::cout << "readyok" << std::endl; }
-void handleUciNewGame() { currentBoard.reset(); }
+void handleUciNewGame() { 
+    currentBoard.reset(); 
+    transpositionTable.clear(); 
+}
 void handlePosition(std::istringstream& iss) {
     std::string token, fen_str; iss >> token; 
-    if (token == "startpos") { currentBoard.reset(); iss >> token; } 
-    else if (token == "fen") {
+    if (token == "startpos") { 
+        currentBoard.reset(); 
+        transpositionTable.clear(); 
+        iss >> token; 
+    } else if (token == "fen") {
         while(iss >> token && token != "moves") { fen_str += token + " "; }
         if (!fen_str.empty()) fen_str.pop_back(); 
         currentBoard.parseFen(fen_str);
+        transpositionTable.clear(); 
     } 
     if (token == "moves") { 
         while (iss >> token) { 
@@ -755,7 +845,8 @@ void handleGo(std::istringstream& iss) {
 
     Move bestMoveOverall = legalEngineMoves[0]; 
     Move bestMoveThisIteration = legalEngineMoves[0];
-    int bestEvalOverall = currentBoard.whiteToMove ? std::numeric_limits<int>::min() : std::numeric_limits<int>::min(); // Engine maximizes its own score
+    int bestEvalOverall = std::numeric_limits<int>::min();
+
 
     bool isEngineWhite = currentBoard.whiteToMove;
 
@@ -810,16 +901,13 @@ void handleGo(std::istringstream& iss) {
             int uci_score_val = bestEvalOverall;
             std::string uci_score_type = "cp";
 
-            // Refined mate score reporting
             if (abs(uci_score_val) > MATE_SCORE - MAX_SEARCH_PLY * 2 ) { 
                 uci_score_type = "mate";
-                // Calculate mate in X moves. Positive if engine is mating, negative if engine is being mated.
-                // The number of ply to mate from the *root* of the current ID iteration
-                int ply_to_mate_from_root_id = MATE_SCORE - abs(uci_score_val); 
-                // Convert ply to moves (1 move = 2 ply, but for the last move of a mate it's 1 ply)
-                int moves_to_mate = (ply_to_mate_from_root_id + 1) / 2; 
-                uci_score_val = (bestEvalOverall > 0) ? moves_to_mate : -moves_to_mate;
+                int mate_in_ply_from_root = MATE_SCORE - abs(uci_score_val); 
+                int mate_in_moves = (mate_in_ply_from_root + 1 + (currentDepth%2) ) / 2;      
+                uci_score_val = (bestEvalOverall > 0) ? mate_in_moves : -mate_in_moves;
             }
+
 
             std::cout << "info depth " << currentDepth 
                       << " score " << uci_score_type << " " << uci_score_val
