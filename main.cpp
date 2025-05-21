@@ -111,9 +111,9 @@ const int king_pst_eg[64] = {
 // Evaluation scores for terminal states (absolute value)
 const int MATE_SCORE = 100000; 
 const int DRAW_SCORE = 0;     
-const int MAX_SEARCH_PLY = 64; 
-const int MAX_QUIESCENCE_PLY = 6; // Can be slightly deeper for q-search if needed
-const int IN_CHECK_PENALTY = 50; // Penalty for being in check in q-search stand-pat
+const int MAX_SEARCH_PLY = 64; // Max depth for iterative deepening (can be high)
+const int MAX_QUIESCENCE_PLY = 6; 
+const int IN_CHECK_PENALTY = 50; 
 
 // --- Forward Declarations ---
 struct BoardState;
@@ -497,14 +497,15 @@ int quiescenceSearch(BoardState state, int alpha, int beta, bool maximizingPlaye
     int stand_pat = evaluateBoard(state); 
     bool in_check = isKingInCheck(state, state.whiteToMove);
 
-    if (in_check) { // If in check, consider all moves, not just captures
-        if (maximizingPlayer) stand_pat -= IN_CHECK_PENALTY; // Penalize being in check
+    // Apply penalty if stand-pat is in check
+    if (in_check) { 
+        if (maximizingPlayer) stand_pat -= IN_CHECK_PENALTY; 
         else stand_pat += IN_CHECK_PENALTY;
     }
 
-
     if (maximizingPlayer) {
-        if (stand_pat >= beta && !in_check) return beta; // Stand-pat cutoff only if not in check
+        // Stand-pat cutoff only if NOT in check. If in check, we must make a move.
+        if (stand_pat >= beta && !in_check) return beta; 
         alpha = std::max(alpha, stand_pat);
     } else {
         if (stand_pat <= alpha && !in_check) return alpha; 
@@ -512,18 +513,18 @@ int quiescenceSearch(BoardState state, int alpha, int beta, bool maximizingPlaye
     }
 
     std::vector<Move> q_moves;
-    if (in_check) {
-        generateLegalMoves(state, q_moves, false); // All legal moves if in check
-    } else {
-        generateLegalMoves(state, q_moves, true); // Only captures if not in check
-    }
-    orderMoves(state, q_moves); // Order moves (MVV-LVA for captures)
+    // If in check, generate all legal moves to find an escape.
+    // Otherwise, only generate captures for quiescence.
+    generateLegalMoves(state, q_moves, !in_check); 
+    orderMoves(state, q_moves); 
 
-    if (q_moves.empty() && !in_check) { // No captures and not in check
-        return stand_pat; 
-    }
-    if (q_moves.empty() && in_check) { // No legal moves while in check = checkmate
+    // If in check and no legal moves, it's checkmate.
+    if (in_check && q_moves.empty()) {
         return maximizingPlayer ? (-MATE_SCORE - MAX_SEARCH_PLY - quiescenceDepth) : (MATE_SCORE + MAX_SEARCH_PLY + quiescenceDepth);
+    }
+    // If not in check and no captures, return stand_pat.
+    if (!in_check && q_moves.empty()) {
+        return stand_pat; 
     }
     
     if (maximizingPlayer) {
@@ -572,9 +573,13 @@ void orderMoves(const BoardState& state, std::vector<Move>& moves) {
             
             move.score = (victimValue * 100) - attackerValue; 
         }
-        // Prioritize promotions
         if (move.promotionPiece != EMPTY) {
-            move.score += mvv_lva_piece_values.at(toupper(move.promotionPiece)) * 10; // Add bonus for promotion value
+            auto promo_it = mvv_lva_piece_values.find(toupper(move.promotionPiece));
+            if (promo_it != mvv_lva_piece_values.end()){
+                 move.score += promo_it->second * 100; // Promotions are very valuable
+            } else {
+                 move.score += mvv_lva_piece_values.at(W_QUEEN) * 100; // Default to Queen value if not found
+            }
         }
     }
     std::sort(moves.begin(), moves.end(), [](const Move& a, const Move& b) {
@@ -746,13 +751,11 @@ void handleGo(std::istringstream& iss) {
     generateLegalMoves(currentBoard, legalEngineMoves, false);
     if (legalEngineMoves.empty()) { std::cout << "bestmove 0000" << std::endl; return; }
 
-    orderMoves(currentBoard, legalEngineMoves); // Order root moves
+    orderMoves(currentBoard, legalEngineMoves); 
 
     Move bestMoveOverall = legalEngineMoves[0]; 
     Move bestMoveThisIteration = legalEngineMoves[0];
-    int bestEvalOverall = currentBoard.whiteToMove ? std::numeric_limits<int>::min() : std::numeric_limits<int>::max();
-    if (!currentBoard.whiteToMove) bestEvalOverall = std::numeric_limits<int>::min(); 
-
+    int bestEvalOverall = currentBoard.whiteToMove ? std::numeric_limits<int>::min() : std::numeric_limits<int>::min(); // Engine maximizes its own score
 
     bool isEngineWhite = currentBoard.whiteToMove;
 
@@ -807,13 +810,16 @@ void handleGo(std::istringstream& iss) {
             int uci_score_val = bestEvalOverall;
             std::string uci_score_type = "cp";
 
+            // Refined mate score reporting
             if (abs(uci_score_val) > MATE_SCORE - MAX_SEARCH_PLY * 2 ) { 
                 uci_score_type = "mate";
-                int mate_in_ply_from_root = MATE_SCORE - abs(uci_score_val); 
-                int mate_in_moves = (mate_in_ply_from_root + 1) / 2;       
-                uci_score_val = (bestEvalOverall > 0) ? mate_in_moves : -mate_in_moves;
+                // Calculate mate in X moves. Positive if engine is mating, negative if engine is being mated.
+                // The number of ply to mate from the *root* of the current ID iteration
+                int ply_to_mate_from_root_id = MATE_SCORE - abs(uci_score_val); 
+                // Convert ply to moves (1 move = 2 ply, but for the last move of a mate it's 1 ply)
+                int moves_to_mate = (ply_to_mate_from_root_id + 1) / 2; 
+                uci_score_val = (bestEvalOverall > 0) ? moves_to_mate : -moves_to_mate;
             }
-
 
             std::cout << "info depth " << currentDepth 
                       << " score " << uci_score_type << " " << uci_score_val
