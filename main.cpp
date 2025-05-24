@@ -36,76 +36,14 @@ const std::map<char, int> mvv_lva_piece_values = {
 
 
 // --- Piece-Square Tables (PSTs) ---
-const int pawn_pst[64] = {
-     0,  0,  0,  0,  0,  0,  0,  0,
-    50, 50, 50, 50, 50, 50, 50, 50,
-    10, 10, 20, 30, 30, 20, 10, 10,
-     5,  5, 10, 25, 25, 10,  5,  5,
-     0,  0,  0, 20, 20,  0,  0,  0,
-     5, -5,-10,  0,  0,-10, -5,  5,
-     5, 10, 10,-20,-20, 10, 10,  5,
-     0,  0,  0,  0,  0,  0,  0,  0
-};
-const int knight_pst[64] = {
-    -50,-40,-30,-30,-30,-30,-40,-50,
-    -40,-20,  0,  0,  0,  0,-20,-40,
-    -30,  0, 10, 15, 15, 10,  0,-30,
-    -30,  5, 15, 20, 20, 15,  5,-30,
-    -30,  0, 15, 20, 20, 15,  0,-30,
-    -30,  5, 10, 15, 15, 10,  5,-30,
-    -40,-20,  0,  5,  5,  0,-20,-40,
-    -50,-40,-30,-30,-30,-30,-40,-50
-};
-const int bishop_pst[64] = {
-    -20,-10,-10,-10,-10,-10,-10,-20,
-    -10,  0,  0,  0,  0,  0,  0,-10,
-    -10,  0,  5, 10, 10,  5,  0,-10,
-    -10,  5,  5, 10, 10,  5,  5,-10,
-    -10,  0, 10, 10, 10, 10,  0,-10,
-    -10, 10, 10, 10, 10, 10, 10,-10,
-    -10,  5,  0,  0,  0,  0,  5,-10,
-    -20,-10,-10,-10,-10,-10,-10,-20
-};
-const int rook_pst[64] = {
-      0,  0,  0,  0,  0,  0,  0,  0,
-      5, 10, 10, 10, 10, 10, 10,  5,
-     -5,  0,  0,  0,  0,  0,  0, -5,
-     -5,  0,  0,  0,  0,  0,  0, -5,
-     -5,  0,  0,  0,  0,  0,  0, -5,
-     -5,  0,  0,  0,  0,  0,  0, -5,
-     -5,  0,  0,  0,  0,  0,  0, -5,
-      0,  0,  0,  5,  5,  0,  0,  0
-};
-const int queen_pst[64] = {
-    -20,-10,-10, -5, -5,-10,-10,-20,
-    -10,  0,  0,  0,  0,  0,  0,-10,
-    -10,  0,  5,  5,  5,  5,  0,-10,
-     -5,  0,  5,  5,  5,  5,  0, -5,
-      0,  0,  5,  5,  5,  5,  0, -5,
-    -10,  5,  5,  5,  5,  5,  0,-10,
-    -10,  0,  5,  0,  0,  0,  0,-10,
-    -20,-10,-10, -5, -5,-10,-10,-20
-};
-const int king_pst_mg[64] = { 
-    -30,-40,-40,-50,-50,-40,-40,-30,
-    -30,-40,-40,-50,-50,-40,-40,-30,
-    -30,-40,-40,-50,-50,-40,-40,-30,
-    -30,-40,-40,-50,-50,-40,-40,-30,
-    -20,-30,-30,-40,-40,-30,-30,-20,
-    -10,-20,-20,-20,-20,-20,-20,-10,
-     20, 20,  0,  0,  0,  0, 20, 20,
-     20, 30, 10,  0,  0, 10, 30, 20
-};
-const int king_pst_eg[64] = { 
-    -50,-40,-30,-20,-20,-30,-40,-50,
-    -30,-20,-10,  0,  0,-10,-20,-30,
-    -30,-10, 20, 30, 30, 20,-10,-30,
-    -30,-10, 30, 40, 40, 30,-10,-30,
-    -30,-10, 30, 40, 40, 30,-10,-30,
-    -30,-10, 20, 30, 30, 20,-10,-30,
-    -30,-30,  0,  0,  0,  0,-30,-30,
-    -50,-30,-30,-30,-30,-30,-30,-50
-};
+const int pawn_pst[64] = {0,0,0,0,0,0,0,0,50,50,50,50,50,50,50,50,10,10,20,30,30,20,10,10,5,5,10,25,25,10,5,5,0,0,0,20,20,0,0,0,5,-5,-10,0,0,-10,-5,5,5,10,10,-20,-20,10,10,5,0,0,0,0,0,0,0,0};
+const int knight_pst[64] = {-50,-40,-30,-30,-30,-30,-40,-50,-40,-20,0,0,0,0,-20,-40,-30,0,10,15,15,10,0,-30,-30,5,15,20,20,15,5,-30,-30,0,15,20,20,15,0,-30,-30,5,10,15,15,10,5,-30,-40,-20,0,5,5,0,-20,-40,-50,-40,-30,-30,-30,-30,-40,-50};
+const int bishop_pst[64] = {-20,-10,-10,-10,-10,-10,-10,-20,-10,0,0,0,0,0,0,-10,-10,0,5,10,10,5,0,-10,-10,5,5,10,10,5,5,-10,-10,0,10,10,10,10,0,-10,-10,10,10,10,10,10,10,-10,-10,5,0,0,0,0,5,-10,-20,-10,-10,-10,-10,-10,-10,-20};
+const int rook_pst[64] = {0,0,0,0,0,0,0,0,5,10,10,10,10,10,10,5,-5,0,0,0,0,0,0,-5,-5,0,0,0,0,0,0,-5,-5,0,0,0,0,0,0,-5,-5,0,0,0,0,0,0,-5,-5,0,0,0,0,0,0,-5,0,0,0,5,5,0,0,0};
+const int queen_pst[64] = {-20,-10,-10,-5,-5,-10,-10,-20,-10,0,0,0,0,0,0,-10,-10,0,5,5,5,5,0,-10,-5,0,5,5,5,5,0,-5,0,0,5,5,5,5,0,-5,-10,5,5,5,5,5,0,-10,-10,0,5,0,0,0,0,-10,-20,-10,-10,-5,-5,-10,-10,-20};
+const int king_pst_mg[64] = {-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-30,-40,-40,-50,-50,-40,-40,-30,-20,-30,-30,-40,-40,-30,-30,-20,-10,-20,-20,-20,-20,-20,-20,-10,20,20,0,0,0,0,20,20,20,30,10,0,0,10,30,20};
+const int king_pst_eg[64] = {-50,-40,-30,-20,-20,-30,-40,-50,-30,-20,-10,0,0,-10,-20,-30,-30,-10,20,30,30,20,-10,-30,-30,-10,30,40,40,30,-10,-30,-30,-10,30,40,40,30,-10,-30,-30,-10,20,30,30,20,-10,-30,-30,-30,0,0,0,0,-30,-30,-50,-30,-30,-30,-30,-30,-30,-50};
+
 
 // Evaluation scores for terminal states (absolute value)
 const int MATE_SCORE = 100000; 
@@ -113,9 +51,10 @@ const int DRAW_SCORE = 0;
 const int MAX_SEARCH_PLY = 64; 
 const int MAX_QUIESCENCE_PLY = 6; 
 const int IN_CHECK_PENALTY = 50; 
-const int LMR_REDUCTION = 1; // Depth reduction for LMR
-const int LMR_MIN_MOVES = 3; // Apply LMR after this many moves have been searched at a node
-const int LMR_MIN_DEPTH = 3; // Apply LMR only if current depth is at least this
+const int LMR_REDUCTION = 1; 
+const int LMR_MIN_MOVES_TO_TRY_REDUCTION = 3; // Apply LMR after this many full-depth moves
+const int LMR_MIN_DEPTH_FOR_REDUCTION = 3; // Apply LMR only if current depth is at least this
+const int CHECK_EXTENSION_PLY = 1; // Extend search by this much if giving check
 
 // Transposition Table Entry Flags
 enum TTEntryFlag { TT_EXACT, TT_LOWERBOUND, TT_UPPERBOUND, TT_INVALID };
@@ -606,7 +545,7 @@ void orderMoves(const BoardState& state, std::vector<Move>& moves) {
 }
 
 
-// --- Alpha-Beta Search with Quiescence, Move Ordering & TT ---
+// --- Alpha-Beta Search with Quiescence, Move Ordering, TT & LMR ---
 int alphaBetaSearch(BoardState state, int depth, int alpha, int beta, bool maximizingPlayer, 
                     const std::chrono::steady_clock::time_point& startTime, 
                     const std::chrono::milliseconds& timeLimit) 
@@ -648,26 +587,47 @@ int alphaBetaSearch(BoardState state, int depth, int alpha, int beta, bool maxim
     
     orderMoves(state, legalMoves); 
     TTEntryFlag bestFlag = TT_UPPERBOUND; 
-    int movesSearched = 0;
+    int movesSearchedCount = 0; // Renamed to avoid conflict with std::move
+    bool inCheck = isKingInCheck(state, state.whiteToMove); // Is the current player in check?
 
 
     if (maximizingPlayer) {
         int maxEval = std::numeric_limits<int>::min();
         for (const auto& move : legalMoves) { 
-            BoardState nextState = state; apply_raw_move_to_board(nextState, move); 
+            BoardState nextState = state; 
+            apply_raw_move_to_board(nextState, move); 
+            
             int currentEval;
+            int newDepth = depth - 1;
+            bool givesCheck = isKingInCheck(nextState, nextState.whiteToMove);
+
+            // Check Extension
+            if (givesCheck && depth < MAX_SEARCH_PLY) { // Extend if giving check, but limit total depth
+                newDepth += CHECK_EXTENSION_PLY;
+            }
+
             // Late Move Reduction (LMR)
-            if (depth >= LMR_MIN_DEPTH && movesSearched >= LMR_MIN_MOVES && !move.isCapture(state) && move.promotionPiece == EMPTY && !isKingInCheck(state, state.whiteToMove)) {
-                currentEval = alphaBetaSearch(nextState, depth - 1 - LMR_REDUCTION, alpha, beta, false, startTime, timeLimit);
+            bool applyLmr = false;
+            if (depth >= LMR_MIN_DEPTH_FOR_REDUCTION && 
+                movesSearchedCount >= LMR_MIN_MOVES_TO_TRY_REDUCTION && 
+                !move.isCapture(state) && 
+                move.promotionPiece == EMPTY &&
+                !inCheck && // Don't reduce if current player is in check
+                !givesCheck) { // Don't reduce if move gives check
+                applyLmr = true;
+            }
+
+            if (applyLmr) {
+                currentEval = alphaBetaSearch(nextState, newDepth - LMR_REDUCTION, alpha, beta, false, startTime, timeLimit);
             } else {
-                currentEval = alphaBetaSearch(nextState, depth - 1, alpha, beta, false, startTime, timeLimit);
+                currentEval = alphaBetaSearch(nextState, newDepth, alpha, beta, false, startTime, timeLimit);
             }
             
             if (time_is_up.load(std::memory_order_relaxed)) return 0; 
             
             // Re-search if LMR was applied and the score is promising
-            if (depth >= LMR_MIN_DEPTH && movesSearched >= LMR_MIN_MOVES && !move.isCapture(state) && move.promotionPiece == EMPTY && !isKingInCheck(state, state.whiteToMove) && currentEval > alpha) {
-                 currentEval = alphaBetaSearch(nextState, depth - 1, alpha, beta, false, startTime, timeLimit);
+            if (applyLmr && currentEval > alpha) {
+                 currentEval = alphaBetaSearch(nextState, newDepth, alpha, beta, false, startTime, timeLimit);
                  if (time_is_up.load(std::memory_order_relaxed)) return 0; 
             }
 
@@ -681,30 +641,48 @@ int alphaBetaSearch(BoardState state, int depth, int alpha, int beta, bool maxim
                  bestFlag = TT_LOWERBOUND; 
                  break; 
             }
-            movesSearched++;
+            movesSearchedCount++;
         }
         if (!time_is_up.load(std::memory_order_relaxed) && (transpositionTable.size() < MAX_TT_SIZE || tt_it != transpositionTable.end())) { 
             TTEntry newEntry; newEntry.score = maxEval; newEntry.depth = depth; newEntry.flag = bestFlag;
             transpositionTable[currentKey] = newEntry;
         }
         return maxEval; 
-    } else { 
+    } else { // Minimizing Player
         int minEval = std::numeric_limits<int>::max();
         for (const auto& move : legalMoves) { 
             BoardState nextState = state; apply_raw_move_to_board(nextState, move); 
             int currentEval;
+            int newDepth = depth - 1;
+            bool givesCheck = isKingInCheck(nextState, nextState.whiteToMove);
+
+            // Check Extension
+            if (givesCheck && depth < MAX_SEARCH_PLY) {
+                newDepth += CHECK_EXTENSION_PLY;
+            }
+
             // Late Move Reduction (LMR)
-            if (depth >= LMR_MIN_DEPTH && movesSearched >= LMR_MIN_MOVES && !move.isCapture(state) && move.promotionPiece == EMPTY && !isKingInCheck(state, state.whiteToMove)) {
-                 currentEval = alphaBetaSearch(nextState, depth - 1 - LMR_REDUCTION, alpha, beta, true, startTime, timeLimit);
+            bool applyLmr = false;
+            if (depth >= LMR_MIN_DEPTH_FOR_REDUCTION && 
+                movesSearchedCount >= LMR_MIN_MOVES_TO_TRY_REDUCTION && 
+                !move.isCapture(state) && 
+                move.promotionPiece == EMPTY &&
+                !inCheck && 
+                !givesCheck) {
+                applyLmr = true;
+            }
+
+            if (applyLmr) {
+                 currentEval = alphaBetaSearch(nextState, newDepth - LMR_REDUCTION, alpha, beta, true, startTime, timeLimit);
             } else {
-                 currentEval = alphaBetaSearch(nextState, depth - 1, alpha, beta, true, startTime, timeLimit);
+                 currentEval = alphaBetaSearch(nextState, newDepth, alpha, beta, true, startTime, timeLimit);
             }
 
             if (time_is_up.load(std::memory_order_relaxed)) return 0;
 
             // Re-search for LMR
-            if (depth >= LMR_MIN_DEPTH && movesSearched >= LMR_MIN_MOVES && !move.isCapture(state) && move.promotionPiece == EMPTY && !isKingInCheck(state, state.whiteToMove) && currentEval < beta) {
-                 currentEval = alphaBetaSearch(nextState, depth - 1, alpha, beta, true, startTime, timeLimit);
+            if (applyLmr && currentEval < beta) {
+                 currentEval = alphaBetaSearch(nextState, newDepth, alpha, beta, true, startTime, timeLimit);
                  if (time_is_up.load(std::memory_order_relaxed)) return 0;
             }
 
@@ -718,7 +696,7 @@ int alphaBetaSearch(BoardState state, int depth, int alpha, int beta, bool maxim
                 bestFlag = TT_UPPERBOUND; 
                 break; 
             }
-            movesSearched++;
+            movesSearchedCount++;
         }
         if (!time_is_up.load(std::memory_order_relaxed) && (transpositionTable.size() < MAX_TT_SIZE || tt_it != transpositionTable.end())) {
             TTEntry newEntry; newEntry.score = minEval; newEntry.depth = depth; newEntry.flag = bestFlag;
@@ -752,7 +730,7 @@ std::string checkGameEndStatus() {
 }
 
 // --- UCI Handling --- 
-void handleUci() { std::cout << "id name Geminina\nid author ChessTubeTree\nuciok" << std::endl; } 
+void handleUci() { std::cout << "id name Geminina\nid author LLM Developer\nuciok" << std::endl; } 
 void handleIsReady() { std::cout << "readyok" << std::endl; }
 void handleUciNewGame() { 
     currentBoard.reset(); 
@@ -901,11 +879,15 @@ void handleGo(std::istringstream& iss) {
             int uci_score_val = bestEvalOverall;
             std::string uci_score_type = "cp";
 
+            // Refined mate score reporting
             if (abs(uci_score_val) > MATE_SCORE - MAX_SEARCH_PLY * 2 ) { 
                 uci_score_type = "mate";
-                int mate_in_ply_from_root = MATE_SCORE - abs(uci_score_val); 
-                int mate_in_moves = (mate_in_ply_from_root + 1 + (currentDepth%2) ) / 2;      
-                uci_score_val = (bestEvalOverall > 0) ? mate_in_moves : -mate_in_moves;
+                // Calculate mate in X moves. Positive if engine is mating, negative if engine is being mated.
+                // Number of ply to mate from the *root* of the current ID iteration
+                int ply_to_mate_from_root = MATE_SCORE - abs(uci_score_val); 
+                // Convert ply to moves. Add currentDepth to account for plies already searched in this ID iteration.
+                int moves_to_mate = (ply_to_mate_from_root + currentDepth + 1) / 2;       
+                uci_score_val = (bestEvalOverall > 0) ? moves_to_mate : -moves_to_mate;
             }
 
 
