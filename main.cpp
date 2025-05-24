@@ -752,7 +752,7 @@ std::string checkGameEndStatus() {
 }
 
 // --- UCI Handling --- 
-void handleUci() { std::cout << "id name Geminina\nid author LLM Developer\nuciok" << std::endl; } 
+void handleUci() { std::cout << "id name Geminina\nid author ChessTubeTree\nuciok" << std::endl; } 
 void handleIsReady() { std::cout << "readyok" << std::endl; }
 void handleUciNewGame() { 
     currentBoard.reset(); 
